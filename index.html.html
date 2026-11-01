@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>육군 체력검정 윗몸일으키기 스마트 자동 계측체계</title>
+    <style>
+        /* [1. 밀리터리 텍티컬 HUD 기본 테마 & 리셋] */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        :root {
+            --bg-dark: #0a0f0c;
+            --panel-bg: #111a14;
+            --border-green: #1f3a25;
+            --brand-green: #39e75f;
+            --brand-amber: #e5a93c;
+            --brand-red: #ff4747;
+            --brand-blue: #38a3ff;
+            --text-main: #e6f2e8;
+            --text-dim: #7f9984;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "맑은 고딕", Dotum, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding-bottom: 30px;
+            overflow-x: hidden;
+        }
+
+        /* [상단 국방 헤더] */
+        header {
+            width: 100%;
+            background: linear-gradient(180deg, #142218 0%, #0d1610 100%);
+            border-bottom: 2px solid var(--border-green);
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-title {
+            font-size: 13.5px;
+            font-weight: 800;
+            color: var(--brand-green);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: -0.3px;
+        }
+        .header-badge {
+            background: #16331e;
+            border: 1px solid var(--brand-green);
+            color: var(--brand-green);
+            font-size: 9.5px;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        /* [모드 선택 탭 (카메라 vs 센서)] */
+        .tab-bar {
+            width: 100%;
+            max-width: 520px;
+            display: flex;
+            background: #0d140f;
+            padding: 6px 10px 0 10px;
+            gap: 6px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px 6px;
+            background: #141f17;
+            border: 1px solid #1f3323;
+            border-bottom: none;
+            color: var(--text-dim);
+            font-size: 11.5px;
+            font-weight: bold;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--panel-bg);
+            color: var(--brand-green);
+            border-color: var(--brand-green);
+            border-top: 3px solid var(--brand-green);
+        }
+
+        /* [메인 컨테이너] */
+        .main-wrapper {
+            width: 100%;
+            max-width: 520px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 10px;
+        }
+
+        /* [공통 HUD 카드] */
+        .hud-main-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-green);
+            border-radius: 0 0 6px 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .hud-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr 1fr;
+            gap: 6px;
+        }
+        .hud-box {
+            background: #090e0b;
+            border: 1px solid #182b1d;
+            border-radius: 5px;
+            padding: 8px 6px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .hud-box.highlight {
+            border-color: var(--brand-green);
+            background: #0b1710;
+        }
+        .hud-val {
+            font-size: 32px;
+            font-weight: 900;
+            color: #ffffff;
+            font-family: "Courier New", Courier, monospace;
+            line-height: 1;
+        }
+        .hud-val.timer { color: var(--brand-amber); font-size: 26px; }
+        .hud-val.sub { color: var(--brand-green); font-size: 24px; }
+        .hud-lbl {
+            font-size: 9.5px;
+            color: var(--text-dim);
+            margin-top: 4px;
+            font-weight: bold;
+        }
+
+        /* 상태 뱃지 */
+        .status-badge {
+            padding: 5px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            background: #141f17;
+            color: var(--text-dim);
+            border: 1px solid #233827;
+        }
+        .status-badge.ready { background: #16331e; color: var(--brand-green); border-color: var(--brand-green); }
+        .status-badge.down { background: #3d2c0b; color: var(--brand-amber); border-color: var(--brand-amber); }
+        .status-badge.up { background: #0c3319; color: #4eff7c; border-color: #39e75f; }
+
+        /* 진행률 게이지 바 */
+        .progress-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #090e0b;
+            border-radius: 4px;
+            border: 1px solid #1b2f20;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #1f7a37 0%, var(--brand-green) 100%);
+            transition: width 0.08s ease-out;
+        }
+
+        /* [모드 1: 카메라 뷰 스테이지] */
+        .cam-stage {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #000;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border-green);
+        }
+        #camCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+        #webcamVideo { display: none; }
+
+        /* 터치 가상 센서 조절 오버레이 안내 */
+        .cam-overlay-info {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            right: 6px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .cam-tag {
+            background: rgba(10, 15, 12, 0.75);
+            border: 1px solid var(--border-green);
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 9.5px;
+            color: var(--brand-green);
+            backdrop-filter: blur(2px);
+        }
+
+        /* 카메라 전/후면 및 좌우반전 퀵버튼 */
+        .cam-quick-bar {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            right: 8px;
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+        }
+        .cam-mini-btn {
+            flex: 1;
+            padding: 6px;
+            background: rgba(14, 23, 17, 0.85);
+            border: 1px solid var(--brand-green);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            backdrop-filter: blur(2px);
+        }
+
+        /* [모드 2: 스마트폰 기울기 센서 스테이지] */
+        .sensor-stage {
+            width: 100%;
+            background: #090e0b;
+            border: 1px solid var(--border-green);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .sensor-visualizer {
+            position: relative;
+            width: 220px;
+            height: 120px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            border-bottom: 2px dashed #23472c;
+            margin-bottom: 10px;
+        }
+        /* 시뮬레이션 상체 막대 (실시간 각도 회전) */
+        .torso-bar {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 12px;
+            height: 95px;
+            background: linear-gradient(180deg, var(--brand-green) 0%, #155726 100%);
+            border-radius: 6px;
+            transform-origin: bottom center;
+            transition: transform 0.05s linear;
+            box-shadow: 0 0 12px rgba(57, 231, 95, 0.4);
+        }
+        .torso-head {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border: 2px solid var(--brand-green);
+            border-radius: 50%;
+        }
+        .ground-label {
+            position: absolute;
+            bottom: -18px;
+            font-size: 9.5px;
+            color: var(--text-dim);
+        }
+
+        .sensor-instruction {
+            background: #111a14;
+            border: 1px solid #1c3321;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-size: 10.5px;
+            line-height: 1.45;
+            color: #b7d1bc;
+            width: 100%;
+        }
+        .sensor-instruction strong { color: var(--brand-green); }
+
+        /* [5초 카운트다운 오버레이] */
+        .countdown-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.82);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .countdown-number {
+            font-size: 110px;
+            font-weight: 900;
+            color: var(--brand-green);
+            font-family: monospace;
+            text-shadow: 0 0 30px rgba(57, 231, 95, 0.9);
+            animation: pulseCount 0.9s infinite;
+        }
+        .countdown-title {
+            font-size: 16px;
+            color: #fff;
+            font-weight: bold;
+            margin-top: 10px;
+            letter-spacing: 1px;
+        }
+        @keyframes pulseCount {
+            0% { transform: scale(0.85); opacity: 0.7; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0.85); opacity: 0.7; }
+        }
+
+        /* [컨트롤 패널 및 조작 버튼] */
+        .card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-green);
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .card-title {
+            font-size: 11.5px;
+            font-weight: bold;
+            color: var(--brand-green);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px dashed #1c3321;
+            padding-bottom: 4px;
+        }
+
+        /* 인적사항 입력 줄 */
+        .cadet-inputs {
+            display: flex;
+            gap: 6px;
+        }
+        .cadet-inputs input {
+            flex: 1;
+            background: #090e0b;
+            border: 1px solid #1c3321;
+            color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            text-align: center;
+            outline: none;
+        }
+        .cadet-inputs input:focus { border-color: var(--brand-green); }
+
+        /* 타이머 프리셋 버튼 */
+        .timer-presets {
+            display: flex;
+            gap: 5px;
+        }
+        .btn-preset {
+            flex: 1;
+            padding: 8px 4px;
+            background: #141f17;
+            border: 1px solid #203525;
+            color: var(--text-dim);
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-preset.active {
+            background: #1e4526;
+            color: #fff;
+            border-color: var(--brand-green);
+        }
+
+        /* 액션 버튼군 */
+        .action-row {
+            display: flex;
+            gap: 6px;
+        }
+        button.action-btn {
+            flex: 1;
+            padding: 11px;
+            border-radius: 5px;
+            font-size: 12.5px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .btn-start { background: #218c39; border-color: var(--brand-green); color: #fff; }
+        .btn-start:active { background: #2cb54a; }
+        .btn-stop { background: #c0392b; border-color: var(--brand-red); color: #fff; }
+        .btn-reset { background: #263328; border-color: #3b4d3f; color: var(--text-dim); }
+        .btn-excel { background: #1a4971; border-color: var(--brand-blue); color: #fff; font-size: 11.5px; }
+
+        /* 미세조절 슬라이더 그리드 */
+        .setting-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .setting-item {
+            background: #090e0b;
+            border: 1px solid #182b1d;
+            border-radius: 4px;
+            padding: 6px 8px;
+        }
+        .setting-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+        .setting-label span:last-child {
+            color: var(--brand-green);
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--brand-green);
+            height: 4px;
+        }
+
+        /* 기록 로그 테이블 */
+        .log-box {
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #1c3321;
+            border-radius: 4px;
+            background: #090e0b;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+            text-align: left;
+        }
+        th, td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #142217;
+        }
+        th {
+            background: #0f1911;
+            color: var(--text-dim);
+            position: sticky;
+            top: 0;
+        }
+        .td-rep { color: var(--brand-green); font-weight: bold; width: 45px; }
+        .td-time { color: var(--brand-amber); font-family: monospace; }
+
+        /* 토스트 알림창 */
+        .toast-msg {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(14, 25, 17, 0.95);
+            border: 1px solid var(--brand-green);
+            color: #fff;
+            padding: 9px 16px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
+            z-index: 10000;
+            display: none;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 국방 체력검정 헤더 -->
+<header>
+    <div class="header-title">
+        <span>🛡️ 윗몸일으키기 자동 계측체계</span>
+    </div>
+    <div class="header-badge">군 체력검정 규격 · 100% 독립구동</div>
+</header>
+
+<!-- 측정 모드 선택 탭 -->
+<div class="tab-bar">
+    <button type="button" class="tab-btn active" id="tabCam" onclick="switchMode('CAM')">
+        📹 카메라 가상센서 모드
+    </button>
+    <button type="button" class="tab-btn" id="tabSensor" onclick="switchMode('SENSOR')">
+        📱 스마트폰 기울기 센서 모드
+    </button>
+</div>
+
+<div class="main-wrapper">
+    <!-- 상단 통합 HUD 계측반 -->
+    <div class="hud-main-card">
+        <div class="hud-grid">
+            <div class="hud-box highlight">
+                <div class="hud-val" id="dispRepCount">0</div>
+                <div class="hud-lbl">합격 횟수 (회)</div>
+            </div>
+            <div class="hud-box">
+                <div class="hud-val timer" id="dispTimer">02:00</div>
+                <div class="hud-lbl">남은 시간</div>
+            </div>
+            <div class="hud-box">
+                <div class="hud-val sub" id="dispMetric">0%</div>
+                <div class="hud-lbl" id="lblMetric">상체 도달률</div>
+            </div>
+        </div>
+
+        <div class="status-badge ready" id="dispStateBadge">
+            측정 준비 (시작 대기)
+        </div>
+
+        <div class="progress-wrap">
+            <div class="progress-header">
+                <span>상체 가동 진폭 실시간 게이지</span>
+                <span id="dispProgressPercent">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- [모드 1] 카메라 뷰 스테이지 -->
+    <div id="camSection" style="display: block;">
+        <div class="cam-stage" id="camStage">
+            <canvas id="camCanvas" width="480" height="360"></canvas>
+            <video id="webcamVideo" width="480" height="360" autoplay playsinline muted></video>
+
+            <div class="cam-overlay-info">
+                <span class="cam-tag" id="camNotice">터치하여 UP/DOWN 게이트 위치 조절 가능</span>
+                <span class="cam-tag" id="camFps">30 FPS</span>
+            </div>
+
+            <div class="cam-quick-bar">
+                <button type="button" class="cam-mini-btn" onclick="toggleFacingCamera()">🔄 전/후면 전환</button>
+                <button type="button" class="cam-mini-btn" onclick="toggleMirror()">🪞 좌우반전</button>
+                <button type="button" class="cam-mini-btn" onclick="resetGatePositions()">🎯 게이트 초기화</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- [모드 2] 스마트폰 센서 뷰 스테이지 -->
+    <div id="sensorSection" style="display: none;">
+        <div class="sensor-stage">
+            <div class="sensor-visualizer">
+                <!-- 인체 3D 기울기 시뮬레이션 막대 -->
+                <div class="torso-bar" id="torsoBar">
+                    <div class="torso-head"></div>
+                </div>
+                <div class="ground-label">바닥 수평선 (0°)</div>
+            </div>
+
+            <div class="sensor-instruction">
+                <strong>💡 스마트폰 센서 착용 요령:</strong><br>
+                양손을 가슴에 'X'자로 교차하여 스마트폰을 가슴 중앙에 밀착합니다.<br>
+                등을 바닥에 완전히 대면 <strong>[DOWN]</strong>, 상체를 일으켜 무릎/허벅지 각도에 도달하면 <strong>[UP (+1회)]</strong> 자동 인정됩니다.
+            </div>
+
+            <button type="button" class="cam-mini-btn" style="width:100%; padding:9px; background:#183620;" onclick="requestSensorAccess()">
+                🔑 센서 권한 활성화 / 자이로 영점 재설정
+            </button>
+        </div>
+    </div>
+
+    <!-- 조작 및 제어 패널 -->
+    <div class="card">
+        <div class="card-title">
+            <span>👤 피측정자 인적사항</span>
+            <span style="font-size:9.5px; color:var(--text-dim);">엑셀/한셀 저장용</span>
+        </div>
+        <div class="cadet-inputs">
+            <input type="text" id="cadetId" placeholder="교번/군번 (예: 24-01)" value="24-01">
+            <input type="text" id="cadetName" placeholder="성명 (예: 김철수)" value="김철수">
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">
+            <span>⏱️ 검정 시간 설정</span>
+            <span id="txtTimerStatus" style="font-size:10px; color:var(--brand-amber);">대기 중</span>
+        </div>
+        <div class="timer-presets">
+            <button type="button" class="btn-preset active" id="preset120" onclick="setTimerPreset(120)">2분 (육군검정)</button>
+            <button type="button" class="btn-preset" id="preset60" onclick="setTimerPreset(60)">1분 (약식)</button>
+            <button type="button" class="btn-preset" id="presetFree" onclick="setTimerPreset(0)">자유 측정</button>
+        </div>
+
+        <div class="action-row" style="margin-top: 4px;">
+            <button type="button" class="action-btn btn-start" id="btnMainStart" onclick="handleStartToggle()">
+                ▶️ 측정 시작 (5초 카운트)
+            </button>
+            <button type="button" class="action-btn btn-reset" onclick="resetCounterOnly()">
+                🔄 0회 초기화
+            </button>
+        </div>
+    </div>
+
+    <!-- 미세 파라미터 조절 카드 -->
+    <div class="card">
+        <div class="card-title">
+            <span>⚙️ 감지 민감도 및 판정 임계치 설정</span>
+        </div>
+        <div class="setting-grid" id="camSettingsGrid">
+            <div class="setting-item">
+                <div class="setting-label">
+                    <span>UP 게이트 감도</span>
+                    <span id="txtUpSens">25%</span>
+                </div>
+                <input type="range" id="sliderUpSens" min="10" max="60" value="25" oninput="updateSettings()">
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <span>DOWN 게이트 감도</span>
+                    <span id="txtDownSens">25%</span>
+                </div>
+                <input type="range" id="sliderDownSens" min="10" max="60" value="25" oninput="updateSettings()">
+            </div>
+        </div>
+
+        <div class="setting-grid" id="sensorSettingsGrid" style="display: none;">
+            <div class="setting-item">
+                <div class="setting-label">
+                    <span>누움 기준각(DOWN)</span>
+                    <span id="txtDownAngle">28°</span>
+                </div>
+                <input type="range" id="sliderDownAngle" min="10" max="45" value="28" oninput="updateSettings()">
+            </div>
+            <div class="setting-item">
+                <div class="setting-label">
+                    <span>일으킴 기준각(UP)</span>
+                    <span id="txtUpAngle">65°</span>
+                </div>
+                <input type="range" id="sliderUpAngle" min="50" max="85" value="65" oninput="updateSettings()">
+            </div>
+        </div>
+    </div>
+
+    <!-- 엑셀 다운로드 및 랩타임 기록 카드 -->
+    <div class="card">
+        <div class="card-title">
+            <span>📋 실시간 랩타임 기록부</span>
+            <span id="txtTotalReps" style="font-size:10.5px; color:var(--brand-green);">0회 누적</span>
+        </div>
+        <div class="log-box">
+            <table id="logTable">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">회차</th>
+                        <th style="width: 40%;">누적 시간</th>
+                        <th style="width: 40%;">구간 랩타임</th>
+                    </tr>
+                </thead>
+                <tbody id="logTableBody">
+                    <tr id="emptyRow">
+                        <td colspan="3" style="text-align:center; color:var(--text-dim); padding:10px;">측정 기록이 없습니다.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <button type="button" class="action-btn btn-excel" onclick="exportToCSV()">
+            📊 측정결과 엑셀/한셀 저장 (.csv)
+        </button>
+    </div>
+</div>
+
+<!-- 5초 준비 카운트다운 레이어 -->
+<div class="countdown-overlay" id="countdownOverlay">
+    <div class="countdown-number" id="countdownNum">5</div>
+    <div class="countdown-title">자세를 준비하십시오!</div>
+</div>
+
+<!-- 토스트 알림창 -->
+<div class="toast-msg" id="toastMsg">알림 메시지</div>
+
+<script>
+    /* ==========================================================================
+       [1. 전역 변수 및 상태 머신 정의]
+       ========================================================================== */
+    var currentMode = "CAM"; // "CAM" | "SENSOR"
+    var isRunning = false;
+    var isCountingDown = false;
+
+    // 카운트 및 자세 상태 머신 (FSM)
+    var repCount = 0;
+    var repState = "READY"; // "READY" -> "DOWN_CONFIRMED" -> "UP_CONFIRMED" -> "READY"
+    var lastStateChangeTime = 0;
+    var lapRecords = []; // { rep: 1, elapsedSec: 2.1, lapSec: 2.1 }
+
+    // 타이머
+    var totalTimeSetting = 120; // 120초(2분) / 60초 / 0(자유)
+    var remainingSeconds = 120;
+    var elapsedSeconds = 0;
+    var timerTimerId = null;
+
+    // Web Audio 신시사이저
+    var audioCtx = null;
+
+    // 카메라 모드 관련 변수
+    var video = document.getElementById('webcamVideo');
+    var canvas = document.getElementById('camCanvas');
+    var ctx = canvas.getContext('2d');
+    var facingMode = "environment"; // 모바일 기본: 후면 카메라 (삼각대 거치 고려)
+    var isMirrored = false;
+    var streamObj = null;
+
+    // 저해상도 프레임 차분 픽셀 분석기 (CPU 과열 방지)
+    var diffCanvas = document.createElement('canvas');
+    diffCanvas.width = 120;
+    diffCanvas.height = 90;
+    var diffCtx = diffCanvas.getContext('2d');
+    var prevImageData = null;
+
+    // 카메라 터치 드래그 가상 게이트 (비율 0~1)
+    var gateUP = { x: 0.15, y: 0.15, w: 0.32, h: 0.35, color: "#38a3ff", name: "UP(무릎/상체)" };
+    var gateDOWN = { x: 0.55, y: 0.55, w: 0.35, h: 0.35, color: "#e5a93c", name: "DOWN(바닥/등)" };
+    var activeDraggingGate = null;
+    var dragTouchOffset = { x: 0, y: 0 };
+
+    var upSensitivity = 0.25;
+    var downSensitivity = 0.25;
+
+    // 스마트폰 센서 모드 관련 변수
+    var currentPitchAngle = 0; // 0도(누움) ~ 90도(일어남)
+    var sensorDownAngle = 28;
+    var sensorUpAngle = 65;
+    var isOrientationListening = false;
+
+    /* ==========================================================================
+       [2. Web Audio API 사운드 시스템 (무설치 톤 신시사이저)]
+       ========================================================================== */
+    function initAudio() {
+        if (!audioCtx) {
+            var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+                audioCtx = new AudioContextClass();
+            }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    // 신호음 재생기
+    function playBeep(freq, type, duration, startOffset) {
+        try {
+            initAudio();
+            if (!audioCtx) return;
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            var now = audioCtx.currentTime + (startOffset || 0);
+
+            osc.type = type || 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + duration + 0.05);
+        } catch (e) {}
+    }
+
+    function soundDownDetected() {
+        // DOWN 인식음: 부드러운 저음
+        playBeep(350, 'triangle', 0.09);
+    }
+
+    function soundUpCounted() {
+        // UP 카운트 성공음: 경쾌한 상승 2단 화음
+        playBeep(660, 'sine', 0.08, 0);
+        playBeep(880, 'sine', 0.14, 0.07);
+    }
+
+    function soundCountdown() {
+        playBeep(520, 'sine', 0.07);
+    }
+
+    function soundStartWhistle() {
+        playBeep(1040, 'triangle', 0.28);
+    }
+
+    function soundFinishBuzzer() {
+        playBeep(300, 'sawtooth', 0.45);
+        setTimeout(function() { playBeep(300, 'sawtooth', 0.5); }, 500);
+    }
+
+    /* ==========================================================================
+       [3. 사용자 인터페이스 & 토스트 알림]
+       ========================================================================== */
+    function showToast(msg) {
+        var el = document.getElementById('toastMsg');
+        el.innerText = msg;
+        el.style.display = 'block';
+        clearTimeout(el.timer);
+        el.timer = setTimeout(function() {
+            el.style.display = 'none';
+        }, 2200);
+    }
+
+    function updateSettings() {
+        upSensitivity = parseInt(document.getElementById('sliderUpSens').value, 10) / 100;
+        document.getElementById('txtUpSens').innerText = Math.round(upSensitivity * 100) + "%";
+
+        downSensitivity = parseInt(document.getElementById('sliderDownSens').value, 10) / 100;
+        document.getElementById('txtDownSens').innerText = Math.round(downSensitivity * 100) + "%";
+
+        sensorDownAngle = parseInt(document.getElementById('sliderDownAngle').value, 10);
+        document.getElementById('txtDownAngle').innerText = sensorDownAngle + "°";
+
+        sensorUpAngle = parseInt(document.getElementById('sliderUpAngle').value, 10);
+        document.getElementById('txtUpAngle').innerText = sensorUpAngle + "°";
+    }
+
+    function switchMode(mode) {
+        if (isRunning || isCountingDown) {
+            showToast("측정 중에는 모드를 전환할 수 없습니다.");
+            return;
+        }
+        currentMode = mode;
+        if (mode === "CAM") {
+            document.getElementById('tabCam').classList.add('active');
+            document.getElementById('tabSensor').classList.remove('active');
+            document.getElementById('camSection').style.display = 'block';
+            document.getElementById('sensorSection').style.display = 'none';
+            document.getElementById('camSettingsGrid').style.display = 'grid';
+            document.getElementById('sensorSettingsGrid').style.display = 'none';
+            document.getElementById('lblMetric').innerText = "상체 도달률";
+            startCamera();
+        } else {
+            document.getElementById('tabCam').classList.remove('active');
+            document.getElementById('tabSensor').classList.add('active');
+            document.getElementById('camSection').style.display = 'none';
+            document.getElementById('sensorSection').style.display = 'block';
+            document.getElementById('camSettingsGrid').style.display = 'none';
+            document.getElementById('sensorSettingsGrid').style.display = 'grid';
+            document.getElementById('lblMetric').innerText = "상체 각도";
+            stopCamera();
+            requestSensorAccess();
+        }
+        resetCounterOnly();
+    }
+
+    function setTimerPreset(sec) {
+        if (isRunning || isCountingDown) return;
+        totalTimeSetting = sec;
+        remainingSeconds = sec;
+        elapsedSeconds = 0;
+        document.getElementById('preset120').classList.toggle('active', sec === 120);
+        document.getElementById('preset60').classList.toggle('active', sec === 60);
+        document.getElementById('presetFree').classList.toggle('active', sec === 0);
+        updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+        var targetSec = (totalTimeSetting === 0) ? elapsedSeconds : remainingSeconds;
+        var m = Math.floor(targetSec / 60);
+        var s = targetSec % 60;
+        document.getElementById('dispTimer').innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+    }
+
+    function updateStatusBadge(text, stateClass) {
+        var badge = document.getElementById('dispStateBadge');
+        badge.className = "status-badge " + stateClass;
+        badge.innerText = text;
+    }
+
+    /* ==========================================================================
+       [4. 타이머 및 5초 카운트다운 엔진]
+       ========================================================================== */
+    function handleStartToggle() {
+        initAudio();
+        if (isRunning) {
+            stopMeasurement("측정 중단");
+        } else {
+            startCountdown();
+        }
+    }
+
+    function startCountdown() {
+        if (isCountingDown) return;
+        isCountingDown = true;
+        var count = 5;
+        var overlay = document.getElementById('countdownOverlay');
+        var num = document.getElementById('countdownNum');
+        overlay.style.display = 'flex';
+        num.innerText = count;
+        soundCountdown();
+
+        var cInterval = setInterval(function() {
+            count--;
+            if (count > 0) {
+                num.innerText = count;
+                soundCountdown();
+            } else {
+                clearInterval(cInterval);
+                overlay.style.display = 'none';
+                isCountingDown = false;
+                soundStartWhistle();
+                startMeasurement();
+            }
+        }, 1000);
+    }
+
+    function startMeasurement() {
+        isRunning = true;
+        elapsedSeconds = 0;
+        if (totalTimeSetting > 0) remainingSeconds = totalTimeSetting;
+        updateTimerDisplay();
+
+        var btn = document.getElementById('btnMainStart');
+        btn.innerText = "⏹️ 측정 중단 / 종료";
+        btn.className = "action-btn btn-stop";
+        document.getElementById('txtTimerStatus').innerText = "측정 진행 중";
+        document.getElementById('txtTimerStatus').style.color = "var(--brand-green)";
+        updateStatusBadge("측정 진행 중 (정자세 실시)", "ready");
+
+        if (timerTimerId) clearInterval(timerTimerId);
+        timerTimerId = setInterval(function() {
+            elapsedSeconds++;
+            if (totalTimeSetting > 0) {
+                remainingSeconds--;
+                updateTimerDisplay();
+                if (remainingSeconds === 30) showToast("⏰ 30초 남았습니다!");
+                if (remainingSeconds === 10) showToast("⚠️ 10초 전!");
+                if (remainingSeconds <= 0) {
+                    soundFinishBuzzer();
+                    stopMeasurement("시간 종료 (측정 완료)");
+                }
+            } else {
+                updateTimerDisplay();
+            }
+        }, 1000);
+    }
+
+    function stopMeasurement(reason) {
+        isRunning = false;
+        if (timerTimerId) clearInterval(timerTimerId);
+        var btn = document.getElementById('btnMainStart');
+        btn.innerText = "▶️ 측정 시작 (5초 카운트)";
+        btn.className = "action-btn btn-start";
+        document.getElementById('txtTimerStatus').innerText = reason || "측정 대기";
+        document.getElementById('txtTimerStatus').style.color = "var(--brand-amber)";
+        updateStatusBadge(reason + " - 최종 " + repCount + "회 달성", "ready");
+        showToast("측정이 종료되었습니다. 기록을 확인하세요.");
+    }
+
+    function resetCounterOnly() {
+        repCount = 0;
+        repState = "READY";
+        lapRecords = [];
+        elapsedSeconds = 0;
+        if (totalTimeSetting > 0) remainingSeconds = totalTimeSetting;
+        updateTimerDisplay();
+        document.getElementById('dispRepCount').innerText = "0";
+        document.getElementById('txtTotalReps').innerText = "0회 누적";
+        document.getElementById('logTableBody').innerHTML = '<tr id="emptyRow"><td colspan="3" style="text-align:center; color:var(--text-dim); padding:10px;">측정 기록이 없습니다.</td></tr>';
+        document.getElementById('progressBarFill').style.width = "0%";
+        document.getElementById('dispProgressPercent').innerText = "0%";
+        updateStatusBadge("초기화 완료 (준비)", "ready");
+    }
+
+    function addLapRecord() {
+        var curElapsed = elapsedSeconds;
+        var prevElapsed = (lapRecords.length > 0) ? lapRecords[lapRecords.length - 1].elapsedSec : 0;
+        var lapSec = Math.max(0.1, curElapsed - prevElapsed);
+
+        var rec = {
+            rep: repCount,
+            elapsedSec: curElapsed,
+            lapSec: lapSec
+        };
+        lapRecords.push(rec);
+
+        var emptyRow = document.getElementById('emptyRow');
+        if (emptyRow) emptyRow.remove();
+
+        var m = Math.floor(curElapsed / 60);
+        var s = curElapsed % 60;
+        var timeStr = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+
+        var tbody = document.getElementById('logTableBody');
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td class="td-rep">' + rec.rep + '회</td>' +
+                       '<td class="td-time">' + timeStr + '</td>' +
+                       '<td style="color:#b7d1bc;">+' + rec.lapSec + '초</td>';
+        tbody.insertBefore(tr, tbody.firstChild);
+        document.getElementById('txtTotalReps').innerText = repCount + "회 누적";
+    }
+
+    /* ==========================================================================
+       [5. 카메라 비전 및 듀얼 가상 센서 게이트 (터치 드래그)]
+       ========================================================================== */
+    function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast("이 브라우저는 카메라 스트림을 지원하지 않습니다.");
+            return;
+        }
+        stopCamera();
+        var constraints = {
+            video: {
+                facingMode: facingMode,
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            },
+            audio: false
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+            streamObj = stream;
+            video.srcObject = stream;
+            video.play();
+            requestAnimationFrame(processCamFrame);
+            showToast("카메라가 활성화되었습니다.");
+        }).catch(function(err) {
+            showToast("카메라 권한 거부 또는 연결 실패: " + err.message);
+        });
+    }
+
+    function stopCamera() {
+        if (streamObj) {
+            streamObj.getTracks().forEach(function(t) { t.stop(); });
+            streamObj = null;
+        }
+    }
+
+    function toggleFacingCamera() {
+        facingMode = (facingMode === "user") ? "environment" : "user";
+        startCamera();
+    }
+
+    function toggleMirror() {
+        isMirrored = !isMirrored;
+        showToast(isMirrored ? "좌우 반전 ON" : "좌우 반전 OFF");
+    }
+
+    function resetGatePositions() {
+        gateUP = { x: 0.15, y: 0.15, w: 0.32, h: 0.35, color: "#38a3ff", name: "UP(무릎/상체)" };
+        gateDOWN = { x: 0.55, y: 0.55, w: 0.35, h: 0.35, color: "#e5a93c", name: "DOWN(바닥/등)" };
+        showToast("가상 게이트 위치가 초기화되었습니다.");
+    }
+
+    // 모바일 터치 이벤트로 게이트 드래그 이동
+    function attachGateTouchEvents() {
+        function getCanvasTouchPos(e) {
+            var rect = canvas.getBoundingClientRect();
+            var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) / rect.width,
+                y: (clientY - rect.top) / rect.height
+            };
+        }
+
+        canvas.addEventListener('touchstart', function(e) {
+            var pos = getCanvasTouchPos(e);
+            if (isPointInside(pos, gateUP)) {
+                activeDraggingGate = gateUP;
+                dragTouchOffset.x = pos.x - gateUP.x;
+                dragTouchOffset.y = pos.y - gateUP.y;
+                e.preventDefault();
+            } else if (isPointInside(pos, gateDOWN)) {
+                activeDraggingGate = gateDOWN;
+                dragTouchOffset.x = pos.x - gateDOWN.x;
+                dragTouchOffset.y = pos.y - gateDOWN.y;
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', function(e) {
+            if (!activeDraggingGate) return;
+            var pos = getCanvasTouchPos(e);
+            activeDraggingGate.x = Math.max(0.01, Math.min(0.99 - activeDraggingGate.w, pos.x - dragTouchOffset.x));
+            activeDraggingGate.y = Math.max(0.01, Math.min(0.99 - activeDraggingGate.h, pos.y - dragTouchOffset.y));
+            e.preventDefault();
+        }, { passive: false });
+
+        window.addEventListener('touchend', function() {
+            activeDraggingGate = null;
+        });
+
+        // PC 마우스 호환
+        canvas.addEventListener('mousedown', function(e) {
+            var pos = getCanvasTouchPos(e);
+            if (isPointInside(pos, gateUP)) {
+                activeDraggingGate = gateUP;
+                dragTouchOffset.x = pos.x - gateUP.x;
+                dragTouchOffset.y = pos.y - gateUP.y;
+            } else if (isPointInside(pos, gateDOWN)) {
+                activeDraggingGate = gateDOWN;
+                dragTouchOffset.x = pos.x - gateDOWN.x;
+                dragTouchOffset.y = pos.y - gateDOWN.y;
+            }
+        });
+        window.addEventListener('mousemove', function(e) {
+            if (!activeDraggingGate) return;
+            var pos = getCanvasTouchPos(e);
+            activeDraggingGate.x = Math.max(0.01, Math.min(0.99 - activeDraggingGate.w, pos.x - dragTouchOffset.x));
+            activeDraggingGate.y = Math.max(0.01, Math.min(0.99 - activeDraggingGate.h, pos.y - dragTouchOffset.y));
+        });
+        window.addEventListener('mouseup', function() {
+            activeDraggingGate = null;
+        });
+    }
+
+    function isPointInside(p, g) {
+        return (p.x >= g.x && p.x <= g.x + g.w && p.y >= g.y && p.y <= g.y + g.h);
+    }
+
+    // 메인 비디오 프로세싱 루프
+    function processCamFrame() {
+        if (currentMode !== "CAM") return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 좌우 반전 옵션
+            if (isMirrored) {
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // 프레임 차분 모션 분석
+            var gateMotion = analyzeGateMotions();
+
+            // 게이트 박스 렌더링
+            renderGateBoxes(gateMotion);
+
+            // 윗몸일으키기 상태 머신 판정
+            if (isRunning) {
+                evaluateSitUpCam(gateMotion);
+            }
+        }
+        requestAnimationFrame(processCamFrame);
+    }
+
+    // 저해상도 프레임 차분 연산 (CPU 부담 0%에 수렴)
+    function analyzeGateMotions() {
+        diffCtx.drawImage(video, 0, 0, diffCanvas.width, diffCanvas.height);
+        var curData = diffCtx.getImageData(0, 0, diffCanvas.width, diffCanvas.height);
+
+        if (!prevImageData) {
+            prevImageData = curData;
+            return { upMotion: 0, downMotion: 0 };
+        }
+
+        var w = diffCanvas.width;
+        var h = diffCanvas.height;
+
+        var upX1 = Math.floor(gateUP.x * w), upX2 = Math.floor((gateUP.x + gateUP.w) * w);
+        var upY1 = Math.floor(gateUP.y * h), upY2 = Math.floor((gateUP.y + gateUP.h) * h);
+        var upPixels = (upX2 - upX1) * (upY2 - upY1);
+        var upDiffCount = 0;
+
+        var dnX1 = Math.floor(gateDOWN.x * w), dnX2 = Math.floor((gateDOWN.x + gateDOWN.w) * w);
+        var dnY1 = Math.floor(gateDOWN.y * h), dnY2 = Math.floor((gateDOWN.y + gateDOWN.h) * h);
+        var dnPixels = (dnX2 - dnX1) * (dnY2 - dnY1);
+        var dnDiffCount = 0;
+
+        for (var y = 0; y < h; y += 2) { // 2px 인터레이스 건너뛰기로 초고속화
+            for (var x = 0; x < w; x += 2) {
+                var idx = (y * w + x) * 4;
+                var diff = Math.abs(curData.data[idx] - prevImageData.data[idx]) +
+                           Math.abs(curData.data[idx+1] - prevImageData.data[idx+1]) +
+                           Math.abs(curData.data[idx+2] - prevImageData.data[idx+2]);
+
+                if (diff > 45) { // 모션 픽셀 임계
+                    if (x >= upX1 && x <= upX2 && y >= upY1 && y <= upY2) {
+                        upDiffCount++;
+                    }
+                    if (x >= dnX1 && x <= dnX2 && y >= dnY1 && y <= dnY2) {
+                        dnDiffCount++;
+                    }
+                }
+            }
+        }
+
+        prevImageData = curData;
+
+        var upRatio = (upPixels > 0) ? (upDiffCount * 4) / upPixels : 0;
+        var downRatio = (dnPixels > 0) ? (dnDiffCount * 4) / dnPixels : 0;
+
+        return {
+            upMotion: Math.min(1.0, upRatio),
+            downMotion: Math.min(1.0, downRatio)
+        };
+    }
+
+    function renderGateBoxes(motion) {
+        ctx.save();
+        var cw = canvas.width;
+        var ch = canvas.height;
+
+        // 1. UP 게이트 렌더링
+        drawSingleGate(gateUP, motion.upMotion, upSensitivity, cw, ch);
+
+        // 2. DOWN 게이트 렌더링
+        drawSingleGate(gateDOWN, motion.downMotion, downSensitivity, cw, ch);
+
+        ctx.restore();
+    }
+
+    function drawSingleGate(gate, curMotion, targetSens, cw, ch) {
+        var gx = gate.x * cw;
+        var gy = gate.y * ch;
+        var gw = gate.w * cw;
+        var gh = gate.h * ch;
+        var isTriggered = (curMotion >= targetSens);
+
+        // 배경 반투명 채우기
+        ctx.fillStyle = isTriggered ? "rgba(57, 231, 95, 0.35)" : "rgba(10, 20, 15, 0.4)";
+        ctx.fillRect(gx, gy, gw, gh);
+
+        // 테두리
+        ctx.strokeStyle = isTriggered ? "#39e75f" : gate.color;
+        ctx.lineWidth = isTriggered ? 3 : 1.5;
+        ctx.strokeRect(gx, gy, gw, gh);
+
+        // 게이트 라벨
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText(gate.name, gx + 6, gy + 15);
+
+        // 반응도 미니 프로그레스 바
+        var barW = gw - 12;
+        var fillW = Math.min(barW, barW * (curMotion / targetSens));
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.fillRect(gx + 6, gy + gh - 12, barW, 6);
+        ctx.fillStyle = isTriggered ? "#39e75f" : gate.color;
+        ctx.fillRect(gx + 6, gy + gh - 12, fillW, 6);
+    }
+
+    // 카메라 모드 상태 머신 (FSM)
+    function evaluateSitUpCam(motion) {
+        var isDownActive = (motion.downMotion >= downSensitivity);
+        var isUpActive = (motion.upMotion >= upSensitivity);
+        var now = Date.now();
+
+        // HUD 게이지 갱신
+        var maxRatio = Math.max(motion.downMotion / downSensitivity, motion.upMotion / upSensitivity);
+        var percent = Math.min(100, Math.round(maxRatio * 100));
+        document.getElementById('dispMetric').innerText = percent + "%";
+        document.getElementById('dispProgressPercent').innerText = percent + "%";
+        document.getElementById('progressBarFill').style.width = percent + "%";
+
+        // 상태 1: 준비 상태 -> 등으로 DOWN 게이트를 터치할 때
+        if (repState === "READY") {
+            if (isDownActive && (now - lastStateChangeTime > 400)) {
+                repState = "DOWN_CONFIRMED";
+                lastStateChangeTime = now;
+                soundDownDetected();
+                updateStatusBadge("등 바닥 닿음 (DOWN 완료) ➔ 상체를 일으키십시오", "down");
+            }
+        }
+        // 상태 2: 등이 닿은 후 -> 상체를 완전히 일으켜 UP 게이트에 진입할 때
+        else if (repState === "DOWN_CONFIRMED") {
+            if (isUpActive && (now - lastStateChangeTime > 450)) {
+                repCount++;
+                document.getElementById('dispRepCount').innerText = repCount;
+                soundUpCounted();
+                addLapRecord();
+                repState = "READY";
+                lastStateChangeTime = now;
+                updateStatusBadge("정자세 1회 인정! (" + repCount + "회 달성)", "up");
+            }
+        }
+    }
+
+    /* ==========================================================================
+       [6. 스마트폰 자이로 / 기울기(Orientation) 센서 모드]
+       ========================================================================== */
+    function requestSensorAccess() {
+        initAudio();
+        // iOS 13+ 기기 권한 요청 대응
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(function(res) {
+                if (res === 'granted') {
+                    bindOrientationListener();
+                    showToast("센서 권한 승인 완료!");
+                } else {
+                    showToast("센서 권한이 거부되었습니다.");
+                }
+            }).catch(function(e) {
+                showToast("센서 권한 오류: " + e.message);
+            });
+        } else {
+            // Android, 일반 모바일 브라우저
+            bindOrientationListener();
+            showToast("기울기 센서가 연동되었습니다.");
+        }
+    }
+
+    function bindOrientationListener() {
+        if (isOrientationListening) return;
+        window.addEventListener('deviceorientation', handleOrientationEvent, true);
+        isOrientationListening = true;
+    }
+
+    function handleOrientationEvent(e) {
+        if (currentMode !== "SENSOR") return;
+
+        // 스마트폰 피치 각도 추출 (가슴에 밀착하고 누웠을 때 ~ 세웠을 때)
+        // beta: [-180, 180] (전후 기울기)
+        var pitch = e.beta || 0;
+        // 각도를 0도(누움) ~ 90도(일으킴) 범위로 정규화
+        pitch = Math.abs(pitch);
+        if (pitch > 90) pitch = 180 - pitch;
+        if (pitch < 0) pitch = 0;
+
+        currentPitchAngle = Math.round(pitch);
+
+        // 시각화 애니메이션 (CSS 3D 회전)
+        var torso = document.getElementById('torsoBar');
+        if (torso) {
+            torso.style.transform = "translateX(-50%) rotate(" + (90 - currentPitchAngle) + "deg)";
+        }
+
+        // HUD 갱신
+        document.getElementById('dispMetric').innerText = currentPitchAngle + "°";
+        var progress = Math.min(100, Math.max(0, Math.round((currentPitchAngle / sensorUpAngle) * 100)));
+        document.getElementById('dispProgressPercent').innerText = progress + "%";
+        document.getElementById('progressBarFill').style.width = progress + "%";
+
+        if (isRunning) {
+            evaluateSitUpSensor(currentPitchAngle);
+        }
+    }
+
+    // 스마트폰 센서 상태 머신
+    function evaluateSitUpSensor(angle) {
+        var now = Date.now();
+
+        // 1. 누운 자세 (지면과 평행: downAngle 이하)
+        if (repState === "READY") {
+            if (angle <= sensorDownAngle && (now - lastStateChangeTime > 350)) {
+                repState = "DOWN_CONFIRMED";
+                lastStateChangeTime = now;
+                soundDownDetected();
+                updateStatusBadge("바닥 착지 (DOWN 확인: " + angle + "°) ➔ 일어나십시오", "down");
+            }
+        }
+        // 2. 일어난 자세 (상체 기립: upAngle 이상)
+        else if (repState === "DOWN_CONFIRMED") {
+            if (angle >= sensorUpAngle && (now - lastStateChangeTime > 400)) {
+                repCount++;
+                document.getElementById('dispRepCount').innerText = repCount;
+                soundUpCounted();
+                addLapRecord();
+                repState = "READY";
+                lastStateChangeTime = now;
+                updateStatusBadge("정자세 기립 인정! (" + repCount + "회)", "up");
+            }
+        }
+    }
+
+    /* ==========================================================================
+       [7. 엑셀/한셀 호환 CSV 내보내기 (UTF-8 with BOM)]
+       ========================================================================== */
+    function exportToCSV() {
+        if (lapRecords.length === 0 && repCount === 0) {
+            showToast("저장할 측정 데이터가 없습니다.");
+            return;
+        }
+
+        var cadetId = document.getElementById('cadetId').value.trim() || "미입력";
+        var cadetName = document.getElementById('cadetName').value.trim() || "후보생";
+        var modeName = (currentMode === "CAM") ? "카메라가상센서" : "스마트폰기울기센서";
+        var now = new Date();
+        var dateStr = now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate() + " " +
+                      now.getHours() + ":" + now.getMinutes() + ":" + now.getSeconds();
+
+        // UTF-8 BOM (\uFEFF) 탑재로 한셀 2018, MS 엑셀에서 한글 깨짐 원천 차단
+        var csv = "\uFEFF";
+        csv += "=== 국방 체력검정 윗몸일으키기 정밀측정 결과표 ===\r\n";
+        csv += "측정일시," + dateStr + "\r\n";
+        csv += "측정모드," + modeName + "\r\n";
+        csv += "교번/군번," + cadetId + ",성명," + cadetName + "\r\n";
+        csv += "측정설정시간," + (totalTimeSetting > 0 ? totalTimeSetting + "초" : "자유측정") +
+               ",실제소요시간," + elapsedSeconds + "초\r\n";
+        csv += "최종합격횟수," + repCount + "회\r\n\r\n";
+
+        csv += "회차(No),누적시간,구간랩타임(초)\r\n";
+        for (var i = 0; i < lapRecords.length; i++) {
+            var r = lapRecords[i];
+            var m = Math.floor(r.elapsedSec / 60);
+            var s = r.elapsedSec % 60;
+            var tStr = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+            csv += r.rep + ',"' + tStr + '",' + r.lapSec + "\r\n";
+        }
+
+        var fileName = "윗몸일으키기_" + cadetId + "_" + cadetName + "_" + now.getTime() + ".csv";
+        var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 200);
+
+        showToast("엑셀/한셀 CSV 파일이 다운로드되었습니다.");
+    }
+
+    /* ==========================================================================
+       [8. 초기 구동 및 이벤트 등록]
+       ========================================================================== */
+    window.addEventListener('DOMContentLoaded', function() {
+        attachGateTouchEvents();
+        updateSettings();
+        setTimerPreset(120);
+
+        // 첫 사용자 인터랙션 시 오디오 컨텍스트 준비
+        document.body.addEventListener('touchstart', initAudio, { once: true });
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        // 기본 카메라 시작
+        startCamera();
+    });
+</script>
+</body>
+</html>
