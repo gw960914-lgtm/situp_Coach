@@ -398,7 +398,7 @@
     <div class="header-title">🛡️ 육군 정자세 윗몸일으키기 AI 정밀 측정체계</div>
     <div class="header-right">
         <button type="button" class="btn-help-top" onclick="openHelpModal()">❓ 사용방법</button>
-        <div class="badge">검정 표준체계 v1.0</div>
+        <div class="badge">검정 표준체계 v1.1</div>
     </div>
 </header>
 
@@ -804,6 +804,15 @@
     // 머리 좌우 방향 감지 상태 (OSD 표시용)
     var currentHeadDirection = "UNKNOWN";
     var bodySidePref = null;         // 카메라 쪽 몸 방향(L/R). 프레임마다 뒤바뀌지 않게 유지
+
+    // 한쪽 측면 관절 세트만 일관되게 사용 (좌/우 관절 혼용 방지)
+    var SIDE_IDX = {
+        L: { s: 11, e: 13, w: 15, h: 23, k: 25, a: 27 },
+        R: { s: 12, e: 14, w: 16, h: 24, k: 26, a: 28 }
+    };
+    var SIDE_SWITCH_MARGIN = 0.4; // 반대쪽이 이만큼 더 잘 보여야 측면 전환 (깜빡임 방지)
+    var SIDE_Z_MARGIN = 0.05;     // 좌/우 깊이(z) 차이가 이 이상이면 카메라에 가까운 쪽을 우선
+    var SIDE_Z_BONUS = 0.8;       // 카메라에 가까운 쪽에 주는 가산점 (가시도 합 기준)
 
     var jointLostStreak = 0;
     var MAX_LOST_FRAMES = 8;
@@ -1222,34 +1231,45 @@
             return;
         }
 
-        // 카메라 쪽(더 잘 보이는 쪽) 관절을 사용. 점수 차이가 뚜렷할 때만 방향을 바꿈
+        // 카메라 쪽 한 측면의 관절 세트만 사용 (관절마다 좌/우를 따로 고르면
+        // 가려진 반대쪽 관절이 섞여 각도가 튐 → 덜 올라왔는데 횟수 인정되는 오판)
         var leftScore = vis(11) + vis(13) + vis(23) + vis(25);
         var rightScore = vis(12) + vis(14) + vis(24) + vis(26);
-        if (bodySidePref === null) {
-            bodySidePref = (leftScore >= rightScore) ? "L" : "R";
-        } else if (bodySidePref === "L" && rightScore > leftScore + 0.30) {
-            bodySidePref = "R";
-        } else if (bodySidePref === "R" && leftScore > rightScore + 0.30) {
-            bodySidePref = "L";
+        // MediaPipe 가시도는 가려진 쪽도 높게 나오는 경우가 많음
+        // → 깊이 z(작을수록 카메라에 가까움)로 실제로 카메라를 향한 쪽에 가산점
+        function zOf(i) { return (lm[i] && typeof lm[i].z === "number") ? lm[i].z : 0; }
+        var zL = (zOf(11) + zOf(23) + zOf(25)) / 3;
+        var zR = (zOf(12) + zOf(24) + zOf(26)) / 3;
+        if (Math.abs(zL - zR) > SIDE_Z_MARGIN) {
+            if (zL < zR) leftScore += SIDE_Z_BONUS; else rightScore += SIDE_Z_BONUS;
         }
-        var preferLeft = (bodySidePref === "L");
-
-        function pickJoint(idxL, idxR) {
-            var pL = lm[idxL];
-            var pR = lm[idxR];
-            var vL = vis(idxL);
-            var vR = vis(idxR);
-            if (preferLeft && vL >= 0.30) return pL;
-            if (!preferLeft && vR >= 0.30) return pR;
-            return (vL >= vR) ? pL : pR;
+        var newSide = bodySidePref;
+        if (bodySidePref && hasTouchedFloorOnce && (isTimerRunning || isUploadAnalysisMode)) {
+            // 측정 중(첫 등 접지 이후)에는 측면 전환 금지: 회차 추적값이 섞이는 것을 방지
+            newSide = bodySidePref;
+        } else if (!bodySidePref) {
+            newSide = (leftScore >= rightScore) ? "L" : "R";
+        } else if (bodySidePref === "L" && rightScore > leftScore + SIDE_SWITCH_MARGIN) {
+            newSide = "R";
+        } else if (bodySidePref === "R" && leftScore > rightScore + SIDE_SWITCH_MARGIN) {
+            newSide = "L";
         }
+        if (newSide !== bodySidePref) {
+            // 측면이 바뀌면 이전 측면 좌표와 섞이지 않도록 평활값·기준값 초기화
+            smoothedCoords = { s: null, e: null, p: null, k: null, w: null, n: null, a: null };
+            lastValidPoints = { s: null, p: null, k: null };
+            hipFloorY = null;
+            resetElbowSwing();
+            bodySidePref = newSide;
+        }
+        var ix = SIDE_IDX[bodySidePref];
 
-        var shoulder = pickJoint(11, 12);
-        var elbow = pickJoint(13, 14);
-        var wrist = pickJoint(15, 16);
-        var hip = pickJoint(23, 24);
-        var knee = pickJoint(25, 26);
-        var ankle = pickJoint(27, 28);
+        var shoulder = lm[ix.s];
+        var elbow = lm[ix.e];
+        var wrist = lm[ix.w];
+        var hip = lm[ix.h];
+        var knee = lm[ix.k];
+        var ankle = lm[ix.a];
         var nose = lm[0];
 
         function isPointValid(pt, minVis) {
