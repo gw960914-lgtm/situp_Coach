@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>육군 정자세 윗몸일으키기 AI 정밀 측정체계</title>
     <!-- MediaPipe Pose CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <!-- mp4-muxer (카카오톡 Fast-Start MP4 고속 변환) -->
     <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.4/build/mp4-muxer.min.js" crossorigin="anonymous"></script>
     <style>
@@ -2898,7 +2898,7 @@
         if (pose) return;
         pose = new Pose({
             locateFile: function(file) {
-                return "https://cdn.jsdelivr.net/npm/@mediapipe/pose/" + file;
+                return "https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/" + file;
             }
         });
 
