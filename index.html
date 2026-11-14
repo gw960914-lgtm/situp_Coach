@@ -2988,8 +2988,9 @@
     //  - 최대 2명을 동시에 인식해, 보조자가 아닌 측정 대상자 1명만 판정에 사용
     //  - 기존 판정 코드는 그대로 두고 pose.send() → onPoseResults({ poseLandmarks }) 형태로 연결
     // ==========================================
-    var TASKS_VISION_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3";
-    var POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
+    // 엔진(@mediapipe/tasks-vision 1.2.3, Apache-2.0)과 모델을 앱과 함께 배포 → 외부 CDN·Google 서버 불필요
+    var TASKS_VISION_URL = new URL("vendor/mediapipe", document.baseURI).href;
+    var POSE_MODEL_URL = TASKS_VISION_URL + "/pose_landmarker_full.task";
     var SUBJECT_MAX_JUMP = 0.6;   // 직전 대상자 골반에서 몸통 길이의 이 비율 이상 떨어진 사람은 대상자로 보지 않음
     var SUBJECT_RESET_MS = 1500;  // 대상자를 이 시간 이상 놓치면 처음부터 다시 선택
     var subjectRef = null;        // 직전 대상자 { x, y: 골반 중심(화면비 보정), len: 몸통 길이, t: 시각 }
