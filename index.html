@@ -1733,7 +1733,7 @@
         }
 
         currentFaultBannerText = "⚠️ " + reason + " [" + warnText + "]";
-        addLogRow(reason + " (" + warnText + ")", detail, true);
+        addLogRow(reason + " (" + warnText + ")", detail, true, typeKey);
 
         if (!inCooldown) {
             lastAnyFaultTime = now;
@@ -1759,7 +1759,8 @@
     }
 
     // 로그 기록 공용 함수. isFault=false이면 안내 기록(부정자세 건수에 포함 안 됨)
-    function addLogRow(reason, detail, isFault) {
+    // type: 부정자세 코드 (예: "SAG", "HAND"). 안내성 기록은 null
+    function addLogRow(reason, detail, isFault, type) {
         if (isFault) {
             failCount++;
             document.getElementById('failCount').innerText = failCount + "건";
@@ -1778,7 +1779,8 @@
             reason: reason,
             detail: detail,
             sec: elapsedSec,
-            isFault: !!isFault
+            isFault: !!isFault,
+            type: type || null
         });
 
         var tbody = document.getElementById('logTableBody');
@@ -1994,6 +1996,7 @@
             totalSeconds: totalSeconds,
             elapsedSeconds: isUploadAnalysisMode ? Math.floor(uploadVideo.currentTime || uploadVideo.duration || 0) : (totalSeconds - remainingSeconds),
             recordingRes: recordingRes,
+            exercise: "SITUP",
             exerciseMode: exerciseMode,
             faultLogs: currentSessionFaultLogs.slice()
         };
@@ -2644,6 +2647,7 @@
             elapsedSeconds: snap.elapsedSeconds,
             sessionType: snap.sessionType,
             recordingRes: snap.recordingRes,
+            exercise: snap.exercise,
             exerciseMode: snap.exerciseMode,
             faultLogs: snap.faultLogs,
             videoBlob: videoBlob
