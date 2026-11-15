@@ -1857,7 +1857,7 @@
         if (isCountingDown) return;
 
         if (!cameraStarted) {
-            if (typeof Pose === "undefined" || typeof Camera === "undefined") {
+            if (typeof Camera === "undefined") {
                 showToast("AI 모듈을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하십시오.");
                 return;
             }
@@ -2473,10 +2473,6 @@
     function triggerVideoUpload() {
         if (isTimerRunning || isRecording || isCountingDown) {
             showToast("실시간 측정이 진행 중입니다. 0회 초기화 후 업로드하십시오.");
-            return;
-        }
-        if (typeof Pose === "undefined") {
-            showToast("AI 모듈을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하십시오.");
             return;
         }
         document.getElementById('videoFileInput').click();
