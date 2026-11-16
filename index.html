@@ -976,6 +976,7 @@
 
     // 판정용 시계(ms). 업로드 분석은 영상 재생 시각 기준이라 배속과 무관하게 동일하게 판정
     function judgeClockMs() {
+        if (typeof frameClockOverride === "number") return frameClockOverride;
         return isUploadAnalysisMode ? Math.round((uploadVideo.currentTime || 0) * 1000) : Date.now();
     }
 
@@ -2591,6 +2592,7 @@
         stopRecording();
         isUploadAnalysisMode = false;
         cancelAnimationFrame(uploadAnalysisFrameId);
+        if (pose) pose.cancel();
         poseBusy = false;
         uploadVideo.pause();
         uploadVideo.removeAttribute('src');
@@ -2938,6 +2940,7 @@
         stopTimer();
         stopRecording();
         isCountingDown = false;
+        if (pose) pose.cancel();
         subjectRef = null;
         document.getElementById('countdownOverlay').style.display = 'none';
         isPausedDueToNoBody = false;
@@ -2995,12 +2998,107 @@
     var SUBJECT_RESET_MS = 1500;  // 대상자를 이 시간 이상 놓치면 처음부터 다시 선택
     var subjectRef = null;        // 직전 대상자 { x, y: 골반 중심(화면비 보정), len: 몸통 길이, t: 시각 }
 
+    var POSE_WORKER_STALL_MS = 10000;    // 작업 공간이 이 시간 동안 응답이 없으면 멈춘 것으로 보고 메인 스레드 방식으로 전환
+    var frameClockOverride = null;       // 작업 공간 결과를 판정할 때, 결과 도착 시각이 아닌 프레임을 보낸 시각을 판정 시계로 사용
+
+    // 인식은 별도 작업 공간(pose-worker.js)에서 실행. 작업 공간을 못 쓰는 기기는 메인 스레드로 실행
     function initPoseModel() {
         if (pose && !pose.failed) return;
+        if (typeof Worker === "function" && typeof createImageBitmap === "function") {
+            initWorkerPose();
+        } else {
+            initMainThreadPose();
+        }
+    }
+
+    function initWorkerPose() {
+        var worker;
+        try {
+            worker = new Worker("pose-worker.js");
+        } catch (e) {
+            initMainThreadPose();
+            return;
+        }
+        var ready = false;
+        var nextId = 1;
+        // 처리 중인 프레임 1개 { id, src, clock, cancelled, resolve, watchdog }
+        //  처리 중에 들어온 새 프레임은 건너뜀 → 작업 공간에 프레임이 쌓이지 않음 (느린 기기에서 지연이 계속 커지는 것 방지)
+        var pending = null;
+
+        function finish(p) {
+            if (pending === p) pending = null;
+            clearTimeout(p.watchdog);
+            p.resolve();
+        }
+
+        var thisPose = {
+            failed: false,
+            engine: "worker",
+            // 측정 종료·초기화 시 처리 중인 프레임의 결과를 판정에서 뺌.
+            //  처리 중 표시는 결과가 올 때까지 유지해 작업 공간에 프레임이 쌓이지 않게 함
+            cancel: function() {
+                if (!pending) return;
+                pending.cancelled = true;
+                pending.resolve();
+            },
+            send: function(input) {
+                var src = input.image;
+                if (!ready || pending || !src || src.readyState < 2) return Promise.resolve();
+                var p = { id: nextId++, src: src, clock: judgeClockMs(), cancelled: false };
+                var done = new Promise(function(resolve) { p.resolve = resolve; });
+                pending = p;
+                p.watchdog = setTimeout(fallBack, POSE_WORKER_STALL_MS);
+                createImageBitmap(src).then(function(bitmap) {
+                    if (pending !== p) { bitmap.close(); return; }
+                    worker.postMessage({ type: "frame", id: p.id, bitmap: bitmap, ts: performance.now() }, [bitmap]);
+                }, function() {
+                    finish(p);   // 프레임 준비 전
+                });
+                return done;
+            }
+        };
+        pose = thisPose;
+
+        function fallBack() {
+            worker.terminate();
+            if (pending) finish(pending);
+            if (pose === thisPose) {
+                pose = null;
+                initMainThreadPose();
+            }
+        }
+        worker.onerror = fallBack;
+        worker.onmessage = function(ev) {
+            var msg = ev.data;
+            if (msg.type === "ready") {
+                ready = true;
+                thisPose.engine = "worker-" + msg.delegate;
+            } else if (msg.type === "error") {
+                fallBack();
+            } else if (msg.type === "result") {
+                if (!pending || pending.id !== msg.id) return;
+                var p = pending;
+                finish(p);
+                if (!p.cancelled && !msg.failed) {
+                    frameClockOverride = p.clock;
+                    try {
+                        onPoseResults({ poseLandmarks: pickSubjectPose(msg.landmarks, p.src) });
+                    } finally {
+                        frameClockOverride = null;
+                    }
+                }
+            }
+        };
+        worker.postMessage({ type: "init", base: TASKS_VISION_URL, model: POSE_MODEL_URL });
+    }
+
+    function initMainThreadPose() {
         var landmarker = null;
         var lastTs = 0;
         pose = {
             failed: false,
+            engine: "main",
+            cancel: function() {},
             send: function(input) {
                 if (!landmarker) return Promise.resolve();   // 모델 로딩 중
                 var src = input.image;
@@ -3120,6 +3218,7 @@
         }
         facingMode = (facingMode === "user") ? "environment" : "user";
         hipFloorY = null;
+        if (pose) pose.cancel();
         subjectRef = null;
         startCameraStream();
         showToast((facingMode === "user" ? "전면(셀카)" : "후면") + " 카메라로 전환되었습니다.");
