@@ -607,7 +607,7 @@
             <div class="help-step">
                 <div class="help-step-title">1단계: 스마트폰 거치 및 카메라 화각 맞추기</div>
                 <div class="help-step-desc">
-                    • 스마트폰을 피측정자의 <b>측면 약 2m 거리</b> 바닥이나 낮은 받침대에 <b>가로로 눕혀 수평으로</b> 세워둡니다. 폰이 기울면 등 접지 판정에 오차가 생깁니다.<br>
+                    • 스마트폰을 피측정자의 <b>측면 약 2m 거리</b> 바닥이나 낮은 받침대에 <b>가로로 눕혀</b> 세워둡니다. 측정이 시작되면 누운 준비자세에서 바닥 기준을 자동으로 잡으므로, 화면 회전 잠금으로 영상이 돌아가거나 폰이 조금 기울어도 판정에 영향이 없습니다.<br>
                     • 누운 자세와 일어난 자세 모두에서 <b>어깨, 골반, 무릎</b>이 화면 안에 들어와야 합니다. 팔꿈치·손·발목까지 보이면 손 이탈과 무릎각도 함께 판정합니다.<br>
                     • 머리가 <b>화면 왼쪽이나 오른쪽</b> 어느 방향을 향해 누워도 같은 기준으로 판정합니다.<br>
                     • AI는 <b>한 사람만</b> 추적합니다. 보조자는 발끝 쪽에서 몸을 낮추고, 다른 사람이 화면에 들어오지 않게 하십시오.<br>
@@ -758,6 +758,10 @@
         ELBOW_SWING_RATIO: 0.30,   // 한 회차 안에서 팔꿈치가 몸통에서 움직인 폭 / 상체 길이
         KNEE_MIN: 55,              // 기구 모드 무릎각 허용 하한
         KNEE_MAX: 125,             // 기구 모드 무릎각 허용 상한
+        CALIB_HIP_MIN: 110,        // 바닥 기준 보정: 고관절각이 이 범위(누운 준비자세, 무릎 굽힘)일 때
+        CALIB_HIP_MAX: 160,        //  몸통 방향을 바닥으로 기억 (선 자세는 약 170° 이상이라 제외)
+        CALIB_RELIFT: 45,          // 보정 범위 자세인데 상체 기울기가 이 값 이상이면 기준이 틀린 것으로 보고 다시 보정
+        CALIB_HOLD_MS: 300,        // 위 조건이 이 시간 이상 이어질 때 보정
 
         // 연속 확인 시간(ms): 1~2프레임짜리 관절 인식 튐으로 판정이 바뀌지 않도록
         // 조건이 이 시간 이상 계속 성립해야 확정 (프레임 수가 아닌 시간 기준이라 15fps·30fps 기기에서 동일)
@@ -849,6 +853,9 @@
     var topSinceMs = 0;
     var floorSinceMs = 0;
     var hipFloorY = null;             // 골반의 바닥 기준 높이(px)
+    var floorRef = null;              // 바닥 기준: 누운 준비자세의 몸통(골반→어깨) 단위 방향 + 올라오는 회전 방향(sign)
+                                      //  화면 가로선 대신 사용 → 폰 회전 잠금으로 영상이 90° 돌아가거나 폰이 기울어도 같은 판정
+                                      //  카메라에 고정된 값이라 관절 미인식·측면 전환에는 유지하고, 화면 크기·카메라·측정이 바뀔 때만 다시 잡음
     var elbowOffSmooth = null;
     var elbowOffMin = null;
     var elbowOffMax = null;
@@ -862,7 +869,7 @@
         "HIP": 0,
         "KNEE": 0
     };
-    var confirmSince = { FLOOR_OUT: 0, UP: 0 }; // 상태 전환 연속 확인 시작 시각
+    var confirmSince = { FLOOR_OUT: 0, UP: 0, CALIB: 0 }; // 상태 전환 연속 확인 시작 시각
     var prevLiftAng = null;           // 직전 프레임 상체 기울기 (등 접지 단일 프레임 튐 방지)
     var lastAnyFaultTime = -1e9;
     var FAULT_COOLDOWN_MS = 2500;
@@ -951,7 +958,7 @@
             return;
         }
         recordingRes = res;
-        hipFloorY = null; // 캔버스 크기가 바뀌므로 골반 기준 높이를 다시 잡음
+        hipFloorY = null; floorRef = null; // 캔버스 크기가 바뀌므로 골반 기준 높이를 다시 잡음
         if (res === "480p") {
             document.getElementById('btnRes480').classList.add('active');
             document.getElementById('btnRes720').classList.remove('active');
@@ -1028,7 +1035,7 @@
             if (canvasElement.width !== targetWidth || canvasElement.height !== targetHeight) {
                 canvasElement.width = targetWidth;
                 canvasElement.height = targetHeight;
-                hipFloorY = null;
+                hipFloorY = null; floorRef = null;
             }
 
             var cw = canvasElement.width;
@@ -1066,18 +1073,19 @@
         var isBad = isFaultDisplayActive();
         var boneColor = isBad ? "#ff3333" : (atTop ? "#e5a93c" : "#39e75f");
 
-        // 바닥 기준선 (골반에서 머리 쪽 수평선): 상체 기울기의 0° 기준
-        var headSide = (pP.x >= pK.x) ? 1 : -1;
+        // 바닥 기준선 (골반에서 머리 쪽, 보정된 바닥 방향): 상체 기울기의 0° 기준. 보정 전에는 그리지 않음
         var torsoLen = pointDist(pS, pP);
+        if (floorRef) {
         ctx.save();
         if (ctx.setLineDash) ctx.setLineDash([6, 5]);
         ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(pP.x, pP.y);
-        ctx.lineTo(pP.x + headSide * torsoLen, pP.y);
+        ctx.lineTo(pP.x + floorRef.x * torsoLen, pP.y + floorRef.y * torsoLen);
         ctx.stroke();
         ctx.restore();
+        }
 
         drawBone(ctx, pS, pP, boneColor, 6);
         drawBone(ctx, pP, pK, boneColor, 6);
@@ -1211,6 +1219,14 @@
 
     // 조건이 since 시각부터 계속 성립해 holdMs 이상 지났는지
     //   sinceObj[key]에 최초 성립 시각 저장 (0 = 미성립). 영상 되감기 등으로 시간이 거꾸로 가면 다시 시작
+    // 보정된 바닥 기준으로 잰 상체 기울기(°): 누우면 0, 수직이면 90, 수직을 넘으면 90 초과
+    function liftFromRef(pS, pP, torsoLen) {
+        var tx = (pS.x - pP.x) / torsoLen, ty = (pS.y - pP.y) / torsoLen;
+        var cross = floorRef.x * ty - floorRef.y * tx;
+        var dot = floorRef.x * tx + floorRef.y * ty;
+        return Math.round(Math.atan2(floorRef.sign * cross, dot) * 180 / Math.PI);
+    }
+
     function holdSatisfied(sinceObj, key, cond, now, holdMs) {
         if (!cond) { sinceObj[key] = 0; return false; }
         if (!sinceObj[key] || now < sinceObj[key]) sinceObj[key] = now || 1;
@@ -1405,7 +1421,6 @@
 
         // 머리 방향: 무릎이 골반의 어느 쪽에 있는지로 판단 (상체가 수직을 넘어가도 안정적)
         var isHeadRight = (pP.x >= pK.x);
-        var headSide = isHeadRight ? 1 : -1;
         if (isHeadRight) {
             currentHeadDirection = "HEAD_RIGHT";
             document.getElementById('fsOrientTag').innerText = "[머리:우 ▶]";
@@ -1419,9 +1434,25 @@
         var torsoLen = pointDist(pS, pP);
         var thighLen = pointDist(pP, pK);
 
-        // 상체 기울기: 화면 수평(바닥) 기준. 누우면 0°, 수직이면 90°
-        currentLiftAng = Math.round(Math.atan2(pP.y - pS.y, headSide * (pS.x - pP.x)) * 180 / Math.PI);
         currentHipAng = getTrueInnerAngle(pS, pP, pK);
+        var liftNow = floorRef ? liftFromRef(pS, pP, torsoLen) : null;
+
+        // 바닥 기준 보정: 누운 준비자세(고관절각 범위)가 이어지면 그때의 몸통 방향을 바닥으로 기억
+        //  기준이 없거나, 같은 자세인데 상체가 크게 기울어 보이면(기준이 틀림) 다시 잡음
+        var calibPose = (torsoLen > 10 && thighLen > 10 &&
+                         currentHipAng >= CFG.CALIB_HIP_MIN && currentHipAng <= CFG.CALIB_HIP_MAX &&
+                         (liftNow === null || Math.abs(liftNow) >= CFG.CALIB_RELIFT));
+        if (holdSatisfied(confirmSince, "CALIB", calibPose, judgeClockMs(), CFG.CALIB_HOLD_MS)) {
+            var rx = (pS.x - pP.x) / torsoLen, ry = (pS.y - pP.y) / torsoLen;
+            // 누운 자세에서 무릎은 몸통선의 '위쪽'(바닥 반대편)에 있음 → 그쪽 회전을 올라오는 방향(+)으로
+            var kneeCross = rx * (pK.y - pP.y) - ry * (pK.x - pP.x);
+            floorRef = { x: rx, y: ry, sign: kneeCross >= 0 ? 1 : -1 };
+            hipFloorY = null;
+            confirmSince.CALIB = 0;
+            liftNow = liftFromRef(pS, pP, torsoLen);
+        }
+        // 상체 기울기: 보정된 바닥 기준. 누우면 0°, 수직이면 90° (보정 전에는 0으로 표시하고 판정하지 않음)
+        currentLiftAng = (liftNow === null) ? 0 : liftNow;
         kneeAngValid = !!pA;
         currentKneeAng = pA ? getTrueInnerAngle(pP, pK, pA) : 0;
 
@@ -1451,17 +1482,21 @@
         }
 
         // 골반의 바닥 높이 추적: 아래로는 빠르게, 위로는 아주 천천히 따라감
+        //  높이는 보정된 바닥의 수직 방향으로 잼 (hipY는 클수록 바닥 쪽)
+        var hipY = floorRef ? -floorRef.sign * (floorRef.x * pP.y - floorRef.y * pP.x) : pP.y;
         if (hipFloorY === null) {
-            hipFloorY = pP.y;
-        } else if (pP.y > hipFloorY) {
-            hipFloorY = hipFloorY * 0.5 + pP.y * 0.5;
+            hipFloorY = hipY;
+        } else if (hipY > hipFloorY) {
+            hipFloorY = hipFloorY * 0.5 + hipY * 0.5;
         } else {
-            hipFloorY = hipFloorY * 0.995 + pP.y * 0.005;
+            hipFloorY = hipFloorY * 0.995 + hipY * 0.005;
         }
-        var hipRise = (torsoLen > 10) ? (hipFloorY - pP.y) / torsoLen : 0;
+        var hipRise = (torsoLen > 10) ? (hipFloorY - hipY) / torsoLen : 0;
 
         var isJudging = (isTimerRunning || isUploadAnalysisMode) && !isPausedDueToNoBody;
-        if (isJudging) {
+        if (isJudging && !floorRef) {
+            setNeutralBanner("등을 바닥에 대고 무릎을 세운 준비자세를 취하십시오 (바닥 기준 확인 중)");
+        } else if (isJudging) {
             judgeFrame({
                 pS: pS,
                 lift: currentLiftAng,
@@ -2951,7 +2986,7 @@
         voiceLockUntil = 0;
         currentHeadDirection = "UNKNOWN";
         bodySidePref = null;
-        hipFloorY = null;
+        hipFloorY = null; floorRef = null;
 
         resetCycleState();
 
@@ -3119,7 +3154,7 @@
             return;
         }
         facingMode = (facingMode === "user") ? "environment" : "user";
-        hipFloorY = null;
+        hipFloorY = null; floorRef = null;
         subjectRef = null;
         startCameraStream();
         showToast((facingMode === "user" ? "전면(셀카)" : "후면") + " 카메라로 전환되었습니다.");
