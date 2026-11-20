@@ -84,6 +84,8 @@ html = replace_once(html, 'var TASKS_VISION_URL = new URL("vendor/mediapipe", do
 html = replace_once(html, 'var POSE_MODEL_URL = TASKS_VISION_URL + "/pose_landmarker_full.task";', 'var POSE_MODEL_URL = "";')
 html = replace_once(html, 'showToast("AI 자세 인식 모델을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시작하십시오.");',
                     'showToast("AI 자세 인식 모델을 불러오지 못했습니다. 크롬 또는 엣지 최신판으로 파일을 다시 여십시오.");')
+html = replace_once(html, 'showToast("AI 모듈을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침하십시오.");',
+                    'showToast("AI 모듈을 불러오지 못했습니다. 크롬 또는 엣지 최신판으로 파일을 다시 여십시오.");')
 
 # 4) 외부 연결 원천 차단(CSP) + 머리 주석 + 버전 표시
 csp = ("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
